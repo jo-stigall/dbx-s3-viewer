@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dbx-s3-viewer"
+version = "0.1.0"
+description = "Terminal browser for S3 paths that Databricks Unity Catalog governs, with single-file downloads"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Environment :: Console :: Curses",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "databricks-sdk>=0.166",
+    "textual>=8.2,<9",
+    "platformdirs>=4",
+    "tomlkit>=0.13",
+    "pyperclip>=1.9",
+    "requests>=2.28",
+]
+
+[project.scripts]
+dbx-s3-viewer = "dbx_s3_viewer.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dbx_s3_viewer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
