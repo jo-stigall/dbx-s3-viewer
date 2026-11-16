@@ -314,11 +314,13 @@ class DatabricksBackend:
                     )
                 expected += 1
                 try:
-                    yield base64.b64decode(data or "", validate=True)
-                except (binascii.Error, ValueError):
+                    yield decode_piece(data)
+                except (binascii.Error, ValueError) as exc:
                     raise BackendError(
                         f"Piece {index} of {target} is not valid base64.",
-                        hint="The tool removed the partial file. Try again.",
+                        hint="The tool removed the partial file. Try again. If it fails "
+                        "again, report the message below.",
+                        detail=f"{exc} (piece length: {len(data or '')} characters)",
                     ) from None
 
         return FileContent(target, size, pieces())
@@ -664,6 +666,20 @@ def _server_text(message: str) -> str:
     "token" or "auth" must look only at the part before it.
     """
     return message.split(" Config: ", 1)[0]
+
+
+#: Spark 3.3 and later split base64 text into lines of 76 characters.
+_LINE_BREAKS = {ord("\r"): None, ord("\n"): None}
+
+
+def decode_piece(text: str | None) -> bytes:
+    """Decode one base64 piece from the warehouse.
+
+    The SQL function `base64` in Spark 3.3 and later puts a line break
+    (CR LF) after each 76 characters. The function removes the line breaks,
+    then rejects any other character that is not base64.
+    """
+    return base64.b64decode((text or "").translate(_LINE_BREAKS), validate=True)
 
 
 def wait_timeout(timeout_seconds: float) -> str:

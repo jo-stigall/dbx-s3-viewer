@@ -27,6 +27,12 @@ READ_RE = re.compile(
     r"0\)\)\) pieces AS i ORDER BY i$")
 
 
+def _spark_base64(data: bytes) -> str:
+    """Encode like Spark 3.3 and later: 76 characters per line, lines joined by CR LF."""
+    text = base64.b64encode(data).decode()
+    return "\r\n".join(text[i:i + 76] for i in range(0, len(text), 76))
+
+
 def _unescape(literal: str) -> str:
     return re.sub(r"\\(.)", r"\1", literal)
 
@@ -88,7 +94,7 @@ class MockWorkspace:
             size, path = int(read.group(1)), _unescape(read.group(2))
             data = self.files[path]
             count = max(1, -(-len(data) // size))
-            rows = [[str(i), base64.b64encode(data[i * size:(i + 1) * size]).decode()]
+            rows = [[str(i), _spark_base64(data[i * size:(i + 1) * size])]
                     for i in range(count)]
             if body.get("disposition") == "EXTERNAL_LINKS":
                 self._link_chunks = [rows[i:i + 2] for i in range(0, len(rows), 2)]

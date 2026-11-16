@@ -495,8 +495,11 @@ def test_read_file_checks_piece_order_and_base64():
         b"".join(make(FakeClient(statements)).read_file("s3://b/f").pieces)
     bad = response(rows=[["0", "not base64!"]], columns=["i", "piece"])
     statements = FakeStatements([stat(1, 6), bad])
-    with pytest.raises(BackendError, match="base64"):
+    with pytest.raises(BackendError, match="base64") as info:
         b"".join(make(FakeClient(statements)).read_file("s3://b/f").pieces)
+    # The detail helps a bug report, and holds no file content.
+    assert "piece length: 11 characters" in info.value.detail
+    assert "not base64" not in info.value.detail
 
 
 def test_read_file_permission_error_says_read():
@@ -644,3 +647,19 @@ def test_wait_timeout_follows_timeout_seconds(timeout, expected):
     statements = FakeStatements([response(rows=[])])
     make(FakeClient(statements), timeout=timeout).list("s3://b/d/")
     assert statements.executed[0][1]["wait_timeout"] == expected
+
+
+def spark_base64(data: bytes) -> str:
+    """Encode like Spark 3.3 and later: 76 characters per line, lines joined by CR LF."""
+    text = base64.b64encode(data).decode()
+    return "\r\n".join(text[i:i + 76] for i in range(0, len(text), 76))
+
+
+def test_read_file_accepts_base64_that_spark_splits_into_lines():
+    first, second = bytes(range(256)) * 3, b"tail,of,the,file\n" * 9
+    assert "\r\n" in spark_base64(first)
+    rows = [["0", spark_base64(first)], ["1", spark_base64(second)]]
+    statements = FakeStatements([stat(1, len(first) + len(second)),
+                                 response(rows=rows, columns=["i", "piece"])])
+    content = make(FakeClient(statements)).read_file("s3://b/d/f.csv")
+    assert b"".join(content.pieces) == first + second
